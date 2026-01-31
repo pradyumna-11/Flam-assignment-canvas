@@ -1,0 +1,48 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: sans-serif;
+}
+
+.toolbar {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  background: #222;
+  color: white;
+}
+
+.toolbar button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+canvas {
+  width: 100vw;
+  height: calc(100vh - 50px);
+  display: block;
+}
+
+.draw-canvas {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  z-index: 1;
+}
+
+.cursor-canvas {
+  position: absolute;
+  top: 50px;
+  left: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.users {
+  display: flex;
+  gap: 10px;
+  margin-left: 20px;
+}
