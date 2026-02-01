@@ -1,39 +1,42 @@
 const { useEffect, useRef, useState } = React;
 
 function App() {
-  // canvases
+  //Refs
   const canvasRef = useRef(null);
   const cursorCanvasRef = useRef(null);
 
-  // core refs
   const engineRef = useRef(null);
   const socketRef = useRef(null);
   const myIdRef = useRef(null);
 
-  // realtime refs (NO re-render)
   const cursorsRef = useRef({});
   const activeRemoteStyles = useRef({});
   const usersRef = useRef({});
+  const rectStartRef = useRef(null);
 
-  // UI state (CAUSE re-render)
+  // UI State
   const [users, setUsers] = useState({});
   const [activeDrawers, setActiveDrawers] = useState([]);
 
-  // tool state
+  // Tool State
   const [tool, setTool] = useState("brush");
   const [color, setColor] = useState("#000000");
   const [width, setWidth] = useState(4);
 
-  //websocket
+  const toolRef = useRef(tool);
+  const colorRef = useRef(color);
+  const widthRef = useRef(width);
+
+  // WebSocket
   useEffect(() => {
     socketRef.current = window.SocketClient.createSocket((msg) => {
 
-      // welcome client
+      // WELCOME / SYNC
       if (msg.type === "welcome") {
         myIdRef.current = msg.id;
 
         const map = {};
-        msg.users.forEach(u => { map[u.id] = u; });
+        msg.users.forEach(u => (map[u.id] = u));
         usersRef.current = map;
         setUsers(map);
 
@@ -55,9 +58,9 @@ function App() {
         return;
       }
 
-      // user join / leave
+      // USER JOIN / LEAVE
       if (msg.type === "user-joined") {
-        const updated = { ...usersRef.current, [msg.id]: { id: msg.id, color: msg.color } };
+        const updated = { ...usersRef.current, [msg.id]: msg };
         usersRef.current = updated;
         setUsers(updated);
         return;
@@ -76,14 +79,14 @@ function App() {
         return;
       }
 
-      /* -------- CURSORS -------- */
+      // CURSORS
       if (msg.type === "cursor") {
         cursorsRef.current[msg.from] = { x: msg.x, y: msg.y };
         drawGhostCursors();
         return;
       }
 
-      /* -------- GLOBAL SYNC (UNDO / REDO) -------- */
+      // SYNC (UNDO / REDO)
       if (msg.type === "sync") {
         const engine = engineRef.current;
         engine.clear();
@@ -101,7 +104,7 @@ function App() {
         return;
       }
 
-      /* -------- REMOTE DRAWING -------- */
+      // REMOTE DRAWING
       if (msg.type === "stroke-start") {
         activeRemoteStyles.current[msg.from] = {
           tool: msg.tool,
@@ -151,10 +154,23 @@ function App() {
         setActiveDrawers(d => d.filter(id => id !== msg.from));
         return;
       }
+
+      // SHAPES (RECTANGLE)
+      if (msg.type === "shape" && msg.shape === "rect") {
+        const ctx = engineRef.current.ctx;
+        ctx.strokeStyle = msg.color;
+        ctx.lineWidth = msg.width;
+        ctx.strokeRect(
+          msg.start.x,
+          msg.start.y,
+          msg.end.x - msg.start.x,
+          msg.end.y - msg.start.y
+        );
+      }
     });
   }, []);
 
-  //canvas setup
+  // Canvas Setup (RUN ONCE)
   useEffect(() => {
     const canvas = canvasRef.current;
     const cursorCanvas = cursorCanvasRef.current;
@@ -178,34 +194,67 @@ function App() {
     };
 
     const down = (e) => {
+      if (!e.isPrimary) return;
+
       e.preventDefault();
       canvas.setPointerCapture(e.pointerId);
 
       const p = getPos(e);
-      const state = engineRef.current.getState();
+
+      if (tool === "rect") {
+        rectStartRef.current = p;
+        return;
+      }
+
+      engineRef.current.setTool(toolRef.current);
+      engineRef.current.setColor(colorRef.current);
+      engineRef.current.setWidth(widthRef.current);
+
 
       engineRef.current.start(p.x, p.y);
 
       socketRef.current.send({
-        type: "stroke-start",
-        x: p.x,
-        y: p.y,
-        tool: state.tool,
-        color: state.color,
-        width: state.width
-      });
+      type: "stroke-start",
+      x: p.x,
+      y: p.y,
+      tool: toolRef.current,
+      color: colorRef.current,
+      width: widthRef.current
+    });
     };
 
     const move = (e) => {
       const p = getPos(e);
+
+      socketRef.current.send({ type: "cursor", x: p.x, y: p.y });
+
+      if (toolRef.current === "rect") return;
+
       engineRef.current.move(p.x, p.y);
       socketRef.current.send({ type: "stroke-point", x: p.x, y: p.y });
-      socketRef.current.send({ type: "cursor", x: p.x, y: p.y });
     };
 
     const up = (e) => {
+      if (toolRef.current === "rect" && rectStartRef.current) {
+        const start = rectStartRef.current;
+        const end = getPos(e);
+
+        socketRef.current.send({
+          type: "shape",
+          shape: "rect",
+          start,
+          end,
+          color: colorRef.current,
+          width: widthRef.current
+        });
+
+        rectStartRef.current = null;
+        return;
+      }
+
       engineRef.current.end();
       socketRef.current.send({ type: "stroke-end" });
+
       if (e.pointerId !== undefined) {
         canvas.releasePointerCapture(e.pointerId);
       }
@@ -221,16 +270,9 @@ function App() {
       canvas.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
-  }, []);
+  }, []); 
 
-  useEffect(() => {
-    if (!engineRef.current) return;
-    engineRef.current.setTool(tool);
-    engineRef.current.setColor(color);
-    engineRef.current.setWidth(width);
-  }, [tool, color, width]);
-
-  // ghost cursor renderer
+  // Ghost Cursors
   function drawGhostCursors() {
     const canvas = cursorCanvasRef.current;
     if (!canvas) return;
@@ -256,7 +298,14 @@ function App() {
     });
   }
 
-  // ui
+  useEffect(() => {
+  toolRef.current = tool;
+  colorRef.current = color;
+  widthRef.current = width;
+}, [tool, color, width]);
+
+
+  // UI
   return React.createElement(
     "div",
     { className: "app" },
@@ -267,6 +316,7 @@ function App() {
 
       React.createElement("button", { onClick: () => setTool("brush") }, "Brush"),
       React.createElement("button", { onClick: () => setTool("eraser") }, "Eraser"),
+      React.createElement("button", { onClick: () => setTool("rect") }, "Rectangle"),
 
       React.createElement("button", {
         onClick: () => socketRef.current.send({ type: "undo" })

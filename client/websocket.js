@@ -1,9 +1,12 @@
 (function () {
   function createSocket(onMessage) {
-    const ws = new WebSocket(`ws://${location.host}`);
+    const roomId =
+      new URLSearchParams(window.location.search).get("room") || "default";
+    // Single WebSocket connection (room-aware)
+    const ws = new WebSocket(`ws://${location.host}?room=${roomId}`);
 
     ws.onopen = () => {
-      console.log("Connected to server");
+      console.log("Connected to server (room:", roomId + ")");
     };
 
     ws.onmessage = (e) => {
@@ -12,7 +15,7 @@
     };
 
     ws.onclose = () => {
-      console.log("Disconnected");
+      console.log("Disconnected from server");
     };
 
     function send(data) {

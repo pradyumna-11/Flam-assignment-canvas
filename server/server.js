@@ -1,7 +1,7 @@
 const express = require("express");
-const path = require("path");
 const http = require("http");
 const WebSocket = require("ws");
+const path = require("path");
 const { v4: uuid } = require("uuid");
 const { getRoom } = require("./rooms");
 
@@ -11,51 +11,41 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, "../client")));
 
-const COLORS = [
-  "#ff4757",
-  "#1e90ff",
-  "#2ed573",
-  "#ffa502",
-  "#9b59b6",
-  "#00cec9",
-];
-let colorIndex = 0;
-
-//broadcast helper
 function broadcast(room, data, exceptWs) {
   const msg = JSON.stringify(data);
-  for (const { ws } of room.clients.values()) {
+  for (const ws of room.clients.values()) {
     if (ws !== exceptWs && ws.readyState === WebSocket.OPEN) {
       ws.send(msg);
     }
   }
 }
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
   const id = uuid();
-  const color = COLORS[colorIndex++ % COLORS.length];
 
-  // using a single default room
-  const room = getRoom("default");
+  // Parse room from URL
+  const params = new URLSearchParams(req.url.replace("/?", ""));
+  const roomId = params.get("room") || "default";
+  const room = getRoom(roomId);
+
+  // assign color
+  const color = `hsl(${Math.random() * 360}, 70%, 60%)`;
 
   // register client in room
-  room.clients.set(id, { ws, color });
+  room.clients.set(id, ws);
 
-  // send welcome message
-  ws.send(
-    JSON.stringify({
-      type: "welcome",
-      id,
-      color,
-      users: Array.from(room.clients.entries()).map(([uid, u]) => ({
-        id: uid,
-        color: u.color,
-      })),
-      strokes: room.state.getAllStrokes(),
-    })
-  );
+  // send welcome + room state
+  ws.send(JSON.stringify({
+    type: "welcome",
+    id,
+    color,
+    users: Array.from(room.clients.keys()).map(uid => ({
+      id: uid,
+      color
+    })),
+    strokes: room.state.getAllStrokes()
+  }));
 
-  // notify others
   broadcast(room, { type: "user-joined", id, color }, ws);
 
   ws.on("message", (raw) => {
@@ -91,10 +81,9 @@ wss.on("connection", (ws) => {
         break;
       }
 
-      case "cursor": {
+      case "cursor":
         broadcast(room, { ...msg, from: id }, ws);
         break;
-      }
 
       case "undo": {
         const strokes = room.state.undo();
@@ -111,20 +100,15 @@ wss.on("connection", (ws) => {
         }
         break;
       }
-
-      default:
-        break;
     }
   });
 
   ws.on("close", () => {
     room.clients.delete(id);
-    room.activeStrokes.delete(id);
     broadcast(room, { type: "user-left", id });
   });
 });
 
-const PORT = 3000;
-server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-});
+server.listen(3000, () =>
+  console.log("Server running at http://localhost:3000")
+);

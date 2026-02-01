@@ -1,7 +1,7 @@
-html, body {
+html,body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: hidden; 
   font-family: sans-serif;
 }
 
@@ -9,21 +9,53 @@ html, body {
   height: 50px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px;
+  flex-wrap: wrap;           
+  gap: 8px;
+  padding: 6px 10px;
   background: #222;
   color: white;
+  box-sizing: border-box;
 }
 
 .toolbar button {
   padding: 6px 12px;
   cursor: pointer;
+  border: none;
+  background: #444;
+  color: white;
+  border-radius: 4px;
+}
+
+.toolbar button:hover {
+  background: #666;
+}
+
+.toolbar input[type="color"],
+.toolbar input[type="range"] {
+  cursor: pointer;
+}
+
+
+.toolbar button,
+.toolbar input {
+  min-height: 40px;
+  font-size: 14px;
+}
+
+.users {
+  display: flex;
+  gap: 10px;
+  margin-left: 20px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 13px;
 }
 
 canvas {
   width: 100vw;
   height: calc(100vh - 50px);
   display: block;
+  touch-action: none;
 }
 
 .draw-canvas {
@@ -38,11 +70,17 @@ canvas {
   top: 50px;
   left: 0;
   z-index: 2;
-  pointer-events: none;
+  pointer-events: none; 
 }
 
-.users {
-  display: flex;
-  gap: 10px;
-  margin-left: 20px;
+@media (max-width: 600px) {
+  .toolbar {
+    height: auto;
+    padding: 8px;
+  }
+
+  .users {
+    margin-left: 0;
+    margin-top: 6px;
+  }
 }
