@@ -43,6 +43,13 @@ class DrawingState {
   getAllStrokes() {
     return this.strokes;
   }
+
+  addShape(stroke) {
+    this.strokes.push(stroke);
+    this.redoStack = [];
+    return stroke;
+  }
+
 }
 
 module.exports = DrawingState;

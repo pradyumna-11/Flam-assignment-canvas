@@ -100,6 +100,21 @@ wss.on("connection", (ws, req) => {
         }
         break;
       }
+    
+      case "stroke-rect": {
+        const stroke = {
+          id: Date.now(),
+          tool: "rect",
+          color: msg.color,
+          width: msg.width,
+          points: [msg.start, msg.end]
+        };
+
+        room.state.addShape(stroke);
+        broadcast(room, { ...msg, from: id });
+        break;
+      }
+
     }
   });
 

@@ -27,6 +27,26 @@ function App() {
   const colorRef = useRef(color);
   const widthRef = useRef(width);
 
+  // 🔥 ADDED: rectangle preview helper
+  function drawRectPreview(start, end) {
+    const canvas = cursorCanvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = colorRef.current;
+    ctx.lineWidth = widthRef.current;
+    ctx.setLineDash([6, 4]);
+
+    ctx.strokeRect(
+      start.x,
+      start.y,
+      end.x - start.x,
+      end.y - start.y
+    );
+
+    ctx.setLineDash([]);
+  }
+
   // WebSocket
   useEffect(() => {
     socketRef.current = window.SocketClient.createSocket((msg) => {
@@ -45,6 +65,20 @@ function App() {
           engine.clear();
 
           msg.strokes.forEach(stroke => {
+            if (stroke.tool === "rect") {
+              const [start, end] = stroke.points;
+              const ctx = engine.ctx;
+
+              ctx.strokeStyle = stroke.color;
+              ctx.lineWidth = stroke.width;
+              ctx.strokeRect(
+                start.x,
+                start.y,
+                end.x - start.x,
+                end.y - start.y
+              );
+              return;
+            }
             engine.setTool(stroke.tool);
             engine.setColor(stroke.color);
             engine.setWidth(stroke.width);
@@ -57,6 +91,7 @@ function App() {
         }
         return;
       }
+
 
       // USER JOIN / LEAVE
       if (msg.type === "user-joined") {
@@ -201,7 +236,7 @@ function App() {
 
       const p = getPos(e);
 
-      if (tool === "rect") {
+      if (toolRef.current === "rect") {
         rectStartRef.current = p;
         return;
       }
@@ -210,17 +245,16 @@ function App() {
       engineRef.current.setColor(colorRef.current);
       engineRef.current.setWidth(widthRef.current);
 
-
       engineRef.current.start(p.x, p.y);
 
       socketRef.current.send({
-      type: "stroke-start",
-      x: p.x,
-      y: p.y,
-      tool: toolRef.current,
-      color: colorRef.current,
-      width: widthRef.current
-    });
+        type: "stroke-start",
+        x: p.x,
+        y: p.y,
+        tool: toolRef.current,
+        color: colorRef.current,
+        width: widthRef.current
+      });
     };
 
     const move = (e) => {
@@ -228,29 +262,59 @@ function App() {
 
       socketRef.current.send({ type: "cursor", x: p.x, y: p.y });
 
-      if (toolRef.current === "rect") return;
+      if (toolRef.current === "rect" && rectStartRef.current) {
+        drawRectPreview(rectStartRef.current, p);
+        return;
+      }
 
       engineRef.current.move(p.x, p.y);
       socketRef.current.send({ type: "stroke-point", x: p.x, y: p.y });
     };
 
     const up = (e) => {
+    const p = getPos(e);
       if (toolRef.current === "rect" && rectStartRef.current) {
         const start = rectStartRef.current;
-        const end = getPos(e);
+        const end = p;
 
+        // draw locally
+        const ctx = engineRef.current.ctx;
+        ctx.strokeStyle = colorRef.current;
+        ctx.lineWidth = widthRef.current;
+        // ctx.strokeRect(
+        //   start.x,
+        //   start.y,
+        //   end.x - start.x,
+        //   end.y - start.y
+        // );
+
+        // clear preview layer
+        const previewCtx = cursorCanvasRef.current.getContext("2d");
+        previewCtx.clearRect(
+          0,
+          0,
+          cursorCanvasRef.current.width,
+          cursorCanvasRef.current.height
+        );
+
+        // broadcast to others
         socketRef.current.send({
-          type: "shape",
-          shape: "rect",
+          type: "stroke-rect",
           start,
           end,
           color: colorRef.current,
           width: widthRef.current
         });
 
+
         rectStartRef.current = null;
+        if (e.pointerId !== undefined) {
+          canvas.releasePointerCapture(e.pointerId);
+        }
+        setTool("brush");
         return;
       }
+
 
       engineRef.current.end();
       socketRef.current.send({ type: "stroke-end" });
@@ -270,7 +334,7 @@ function App() {
       canvas.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     };
-  }, []); 
+  }, []);
 
   // Ghost Cursors
   function drawGhostCursors() {
@@ -299,11 +363,10 @@ function App() {
   }
 
   useEffect(() => {
-  toolRef.current = tool;
-  colorRef.current = color;
-  widthRef.current = width;
-}, [tool, color, width]);
-
+    toolRef.current = tool;
+    colorRef.current = color;
+    widthRef.current = width;
+  }, [tool, color, width]);
 
   // UI
   return React.createElement(
