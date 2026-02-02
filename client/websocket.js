@@ -3,7 +3,11 @@
     const roomId =
       new URLSearchParams(window.location.search).get("room") || "default";
     // Single WebSocket connection (room-aware)
-    const ws = new WebSocket(`ws://${location.host}?room=${roomId}`);
+    const ws =
+      location.hostname === "localhost"
+        ? "ws://localhost:3000"
+        : "wss://flam-assignment-canvas.onrender.com";
+
 
     ws.onopen = () => {
       console.log("Connected to server (room:", roomId + ")");
